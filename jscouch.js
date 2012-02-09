@@ -280,173 +280,231 @@ $(function() {
 
   var examples = [
     {
-      name: "sorting pictures by user",
-      blurb: "In this simple example, we want to sort all the " +
-        "pictures by the user so we can present that in a UI of some " +
-        "sort. So for this we use just the map function which " +
-        "<strong>emit</strong>s one key for each document.",
-      action: function() {
-        maptxt.val('emit(doc.user, null)');
-        redtxt.val('');
-      }
-    },
-    {
-      name: "sorting pictures by date",
-      blurb: "In this simple example, we want to sort all the " +
-        "pictures by date so we can present that in a UI of some " +
-        "sort. So we use just the map function which " +
-        "<strong>emit</strong>s one key/value pair for each of the " +
-        "document.",
-      action: function() {
-        maptxt.val('emit(Date.parse(doc.created_at), null)');
-        redtxt.val('');
-      }
-    },
-    {
-      name: 'total size of all images',
-      blurb: "All we want is to add up the <em>doc.info.size</em> " +
-        "fields across all documents. So we now use the " +
-        "<strong>reduce</strong> function to do this aggregation. " + 
-        "CouchDB provides a <strong>sum</strong> function, but " +
-        "we could add others too.",
-      action: function() {
-        maptxt.val('emit("size", doc.info.size);');
-        redtxt.val('return sum(values);');
-      }
-    },
-    {
-      name: "counting pictures by users",
-      blurb: "Unlike the last example, we are now going to " +
-        "<strong>emit</strong> the name of the user as well as a " +
-        "value of 1. Then we are going to reduce the values for " +
-        "each user to sum of all the values. CouchDB provides a " +
-        "<strong>sum</strong> function, but we could add others " +
-        "too.",
-      action: function() {
-        maptxt.val('emit(doc.user, 1);');
-        redtxt.val('return sum(values);');
-      }
-    },
-    {
-      name: 'counting pictures by hour',
-      blurb: "The key used in <strong>emit</strong> doesn't have to " +
-        "be something in the document. New keys and new values can " +
-        "be derived. Notice how we are taking the create_at date and " +
-        "converting it into hours (since 1971). During the query, " +
-        "this allows us to extract data for specific time slices.",
-      action: function() {
-        maptxt.val('emit(Math.floor(Date.parse(doc.created_at)/1000/60/60), 1);');
-        redtxt.val('return sum(values);');
-      }
-    },
-    {
-      name: 'computing min width/height',
-      blurb: 'Another important concept is that the map function can ' +
-        '<strong>emit</strong> more than one key/value pair for ' +
-        'a given document. But since the keys are grouped together, ' +
-        'you can reduce them independently.',
+      name: "Locate resource_data with DC Terms conformsTo",
+      blurb: "In this example, we want to locate resources that " +
+        "contain standards alignment encoded as Dublin Core Terms " +
+        "&lt;conformsTo&gt; elements.",
       action: function() {
         maptxt.val(
-          'emit("width", doc.info.width);\r\n' +
-          'emit("height", doc.info.height);'
-        );
+          'if (doc.doc_type == "resource_data" && doc.resource_data && doc.resource_locator) {\n'+
+          '    try {\n'+
+          '      var nsdl = XML(doc.resource_data);\n'+
+          '      var dct = new Namespace("http://purl.org/dc/terms/");\n'+
+
+          '      var stds = nsdl..dct::conformsTo;\n'+
+
+          '      for (idx in stds) {\n'+
+          '        emit(["resource", doc.resource_locator] ,stds[idx].toString());\n'+
+          '        emit(["std", stds[idx].toString()],  doc.resource_locator);\n'+
+          '      }\n'+
+
+          '    } catch (error) {\n'+
+          '      //log("error:"+error);\n'+
+          '    }\n'+
+          '} ');    
+       
         redtxt.val(
-          'var rv=null;\r\n' +
-          'for (i=0; i<values.length; ++i) {\r\n' +
-          '    rv = Math.min(values[i], rv || values[i]);\r\n' +
-          '}\r\n' +
-          'return rv;'
-        );
+          'if (!rereduce) {\n'+
+          '     return values.length;\n'+
+          '} else {\n'+
+          '     return sum(values);\n'+
+          '}');
       }
-    },
-    {
-      name: 'computing min AND max width/height',
-      blurb: 'In the last example, we reduced the min of width and ' +
-        'height. What if we wanted to compute both the min and the ' +
-        'max in one go? The answer is by using <em>complex</em> ' +
-        'values. Notice that the reduce function returns a value ' +
-        "that looks very similar to what the map emits.",
+    }, {
+      name: "Locate activity data keyed by action",
+      blurb: "In this example, we demonstrate how to find activity data with an action verb and emit the object being acted upon.<br/>" +
+        "Note that the reduce step provides a summary of all existing verbs and the number of instances of each",
       action: function() {
         maptxt.val(
-          'emit("width", { min: doc.info.width, max: doc.info.width });\r\n' +
-          'emit("height", { min: doc.info.height, max: doc.info.height });'
-        );
+          'try {\n'+
+          '    if (doc.doc_type == "resource_data" && doc.resource_data && doc.resource_locator) {\n'+
+          '        if (doc.resource_data.activity.verb.action) {\n'+
+          '             var a = doc.resource_data.activity;\n'+
+          '                 if (a.object.id) \n'+
+          '                     emit(a.verb.action, a.object.id);\n'+
+          '                 else\n'+
+          '                     emit(a.verb.action, a.object);\n'+
+          '        }\n'+
+          '    } \n'+
+          '} catch(error) {\n'+
+          '    //log(error);\n'+
+          '}\n');
         redtxt.val(
-          'var rv = { min: null, max: null };\r\n' +
-          'for (i=0; i<values.length; ++i) {\r\n' +
-          '    var value = values[i];\r\n' +
-          '    rv.min = Math.min(value.min, rv.min || value.min);\r\n' +
-          '    rv.max = Math.max(value.max, rv.max || value.max);\r\n' +
-          '}\r\n' +
-          'return rv;'
-        );
+          'if (!rereduce) {\n'+
+          '     return values.length;\n'+
+          '} else {\n'+
+          '     return sum(values);\n'+
+          '}');
       }
-    },
-    {
-      name: 'unique cameras for a user (attempt #1)',
-      blurb: 'We want to find out what kind of cameras a given user ' +
-        "has used when uploading pictures. This one uses " +
-        "<strong>reduce</strong> to find that out. But be aware that " +
-        "this could make CouchDB pretty slow especially if the " +
-        "#cameras per user is not bounded.",
-      action: function() {
-        maptxt.val(
-          'var val = {};\r\n' +
-          'val[doc.camera] = 1;\r\n' +
-          'emit(doc.user, val);'
-        );
-        redtxt.val(
-          'var rv = {};\r\n' +
-          'for (i in values) {\r\n' +
-          '    var value = values[i];\r\n' +
-          '    for (k in value) {\r\n' +
-          '        rv[k] = (rv[k] || 0) + value[k];\r\n' +
-          '    }\r\n' +
-          '}\r\n' +
-          'return rv;'
-        );
-      }
-    },
-    {
-      name: 'unique cameras for a user (attempt #2)',
-      blurb: "In this approach, we use [user, camera] as the unique " +
-        "key and reduce that to get our answers. This approach tends " +
-        "to scale better as the number of unique values grows. The " +
-        "downside is that the client has to setup the query properly " +
-        "using <strong>startkey</strong>/<strong>endkey</strong> " +
-        "to get at the unique values.",
-      action: function() {
-        maptxt.val('emit([doc.user, doc.camera], 1);');
-        redtxt.val('return sum(values);');
-      }
-    },
-    {
-      name: "counting pictures by users (advanced)",
-      blurb: "This example demonstrates the <strong>rereduce</strong> " +
-        "option in the reduce function. CouchDB doesn't necessarily " +
-        "pass in all the values for a <em>unique</em> key to the " +
-        "<strong>reduce</strong> function. This means that the " +
-        "reduce function needs to handle values potentially being " +
-        "an array of previous outputs. Since " +
-        "this is an emulator that runs within the browser, we've " +
-        "mapped the <strong>log</strong> method that CouchDB " +
-        "provides into <em>window.alert</em>, so you can see " +
-        "how map/reduce works. You need to " +
-        "explicitly click on the <strong><em>execute</em></strong> " +
-        "link below, which will trigger 5 alerts.",
-      action: function() {
-        mapdiv.find('span.warn').text('');
-        rstbl.empty();
-        rsdiv.empty();
-        bottom.hide();
-        maptxt.val('emit(doc.user, 1);');
-        redtxt.val(
-          'log([ keys, values, rereduce ]);\r\n' +
-          'return sum(values);'
-        );
-        return false;
-      }
-    }
+    }//,
+    // {
+    //   name: "sorting pictures by user",
+    //   blurb: "In this simple example, we want to sort all the " +
+    //     "pictures by the user so we can present that in a UI of some " +
+    //     "sort. So for this we use just the map function which " +
+    //     "<strong>emit</strong>s one key for each document.",
+    //   action: function() {
+    //     maptxt.val('emit(doc.user, null)');
+    //     redtxt.val('');
+    //   }
+    // },
+    // {
+    //   name: "sorting pictures by date",
+    //   blurb: "In this simple example, we want to sort all the " +
+    //     "pictures by date so we can present that in a UI of some " +
+    //     "sort. So we use just the map function which " +
+    //     "<strong>emit</strong>s one key/value pair for each of the " +
+    //     "document.",
+    //   action: function() {
+    //     maptxt.val('emit(Date.parse(doc.created_at), null)');
+    //     redtxt.val('');
+    //   }
+    // },
+    // {
+    //   name: 'total size of all images',
+    //   blurb: "All we want is to add up the <em>doc.info.size</em> " +
+    //     "fields across all documents. So we now use the " +
+    //     "<strong>reduce</strong> function to do this aggregation. " + 
+    //     "CouchDB provides a <strong>sum</strong> function, but " +
+    //     "we could add others too.",
+    //   action: function() {
+    //     maptxt.val('emit("size", doc.info.size);');
+    //     redtxt.val('return sum(values);');
+    //   }
+    // },
+    // {
+    //   name: "counting pictures by users",
+    //   blurb: "Unlike the last example, we are now going to " +
+    //     "<strong>emit</strong> the name of the user as well as a " +
+    //     "value of 1. Then we are going to reduce the values for " +
+    //     "each user to sum of all the values. CouchDB provides a " +
+    //     "<strong>sum</strong> function, but we could add others " +
+    //     "too.",
+    //   action: function() {
+    //     maptxt.val('emit(doc.user, 1);');
+    //     redtxt.val('return sum(values);');
+    //   }
+    // },
+    // {
+    //   name: 'counting pictures by hour',
+    //   blurb: "The key used in <strong>emit</strong> doesn't have to " +
+    //     "be something in the document. New keys and new values can " +
+    //     "be derived. Notice how we are taking the create_at date and " +
+    //     "converting it into hours (since 1971). During the query, " +
+    //     "this allows us to extract data for specific time slices.",
+    //   action: function() {
+    //     maptxt.val('emit(Math.floor(Date.parse(doc.created_at)/1000/60/60), 1);');
+    //     redtxt.val('return sum(values);');
+    //   }
+    // },
+    // {
+    //   name: 'computing min width/height',
+    //   blurb: 'Another important concept is that the map function can ' +
+    //     '<strong>emit</strong> more than one key/value pair for ' +
+    //     'a given document. But since the keys are grouped together, ' +
+    //     'you can reduce them independently.',
+    //   action: function() {
+    //     maptxt.val(
+    //       'emit("width", doc.info.width);\r\n' +
+    //       'emit("height", doc.info.height);'
+    //     );
+    //     redtxt.val(
+    //       'var rv=null;\r\n' +
+    //       'for (i=0; i<values.length; ++i) {\r\n' +
+    //       '    rv = Math.min(values[i], rv || values[i]);\r\n' +
+    //       '}\r\n' +
+    //       'return rv;'
+    //     );
+    //   }
+    // },
+    // {
+    //   name: 'computing min AND max width/height',
+    //   blurb: 'In the last example, we reduced the min of width and ' +
+    //     'height. What if we wanted to compute both the min and the ' +
+    //     'max in one go? The answer is by using <em>complex</em> ' +
+    //     'values. Notice that the reduce function returns a value ' +
+    //     "that looks very similar to what the map emits.",
+    //   action: function() {
+    //     maptxt.val(
+    //       'emit("width", { min: doc.info.width, max: doc.info.width });\r\n' +
+    //       'emit("height", { min: doc.info.height, max: doc.info.height });'
+    //     );
+    //     redtxt.val(
+    //       'var rv = { min: null, max: null };\r\n' +
+    //       'for (i=0; i<values.length; ++i) {\r\n' +
+    //       '    var value = values[i];\r\n' +
+    //       '    rv.min = Math.min(value.min, rv.min || value.min);\r\n' +
+    //       '    rv.max = Math.max(value.max, rv.max || value.max);\r\n' +
+    //       '}\r\n' +
+    //       'return rv;'
+    //     );
+    //   }
+    // },
+    // {
+    //   name: 'unique cameras for a user (attempt #1)',
+    //   blurb: 'We want to find out what kind of cameras a given user ' +
+    //     "has used when uploading pictures. This one uses " +
+    //     "<strong>reduce</strong> to find that out. But be aware that " +
+    //     "this could make CouchDB pretty slow especially if the " +
+    //     "#cameras per user is not bounded.",
+    //   action: function() {
+    //     maptxt.val(
+    //       'var val = {};\r\n' +
+    //       'val[doc.camera] = 1;\r\n' +
+    //       'emit(doc.user, val);'
+    //     );
+    //     redtxt.val(
+    //       'var rv = {};\r\n' +
+    //       'for (i in values) {\r\n' +
+    //       '    var value = values[i];\r\n' +
+    //       '    for (k in value) {\r\n' +
+    //       '        rv[k] = (rv[k] || 0) + value[k];\r\n' +
+    //       '    }\r\n' +
+    //       '}\r\n' +
+    //       'return rv;'
+    //     );
+    //   }
+    // },
+    // {
+    //   name: 'unique cameras for a user (attempt #2)',
+    //   blurb: "In this approach, we use [user, camera] as the unique " +
+    //     "key and reduce that to get our answers. This approach tends " +
+    //     "to scale better as the number of unique values grows. The " +
+    //     "downside is that the client has to setup the query properly " +
+    //     "using <strong>startkey</strong>/<strong>endkey</strong> " +
+    //     "to get at the unique values.",
+    //   action: function() {
+    //     maptxt.val('emit([doc.user, doc.camera], 1);');
+    //     redtxt.val('return sum(values);');
+    //   }
+    // },
+    // {
+    //   name: "counting pictures by users (advanced)",
+    //   blurb: "This example demonstrates the <strong>rereduce</strong> " +
+    //     "option in the reduce function. CouchDB doesn't necessarily " +
+    //     "pass in all the values for a <em>unique</em> key to the " +
+    //     "<strong>reduce</strong> function. This means that the " +
+    //     "reduce function needs to handle values potentially being " +
+    //     "an array of previous outputs. Since " +
+    //     "this is an emulator that runs within the browser, we've " +
+    //     "mapped the <strong>log</strong> method that CouchDB " +
+    //     "provides into <em>window.alert</em>, so you can see " +
+    //     "how map/reduce works. You need to " +
+    //     "explicitly click on the <strong><em>execute</em></strong> " +
+    //     "link below, which will trigger 5 alerts.",
+    //   action: function() {
+    //     mapdiv.find('span.warn').text('');
+    //     rstbl.empty();
+    //     rsdiv.empty();
+    //     bottom.hide();
+    //     maptxt.val('emit(doc.user, 1);');
+    //     redtxt.val(
+    //       'log([ keys, values, rereduce ]);\r\n' +
+    //       'return sum(values);'
+    //     );
+    //     return false;
+    //   }
+    // }
   ];
 
   // load the examples
